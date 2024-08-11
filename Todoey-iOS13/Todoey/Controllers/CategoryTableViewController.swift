@@ -7,19 +7,28 @@
 //
 
 import UIKit
-import CoreData
-
-class CategoryTableViewController: UITableViewController {
-    var categoryArray = [Category]()
-    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
+import RealmSwift
+class CategoryTableViewController: SwipeTableViewController {
+    
+    let realm = try! Realm()
+    var categoryArray: Results<Category>?
+    
     
     override func viewDidLoad() {
         super.viewDidLoad()
         loadItems()
+        tableView.rowHeight = 80.0
     }
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return categoryArray.count
+        return categoryArray?.count ?? 1
     }
+    
+//    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+//        let cell = tableView.dequeueReusableCell(withIdentifier: "Cell") as! SwipeTableViewCell
+//        cell.delegate = self
+//        return cell
+//    }
+    
     
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         performSegue(withIdentifier: "goToItems", sender: self)
@@ -29,20 +38,18 @@ class CategoryTableViewController: UITableViewController {
         let destinationVC = segue.destination as! TodoListViewController
         
         if let indexPath = tableView.indexPathForSelectedRow{
-            destinationVC.selectedCategory = categoryArray[indexPath.row]
+            destinationVC.selectedCategory = categoryArray?[indexPath.row]
         }
     }
     
     
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "CategoryCell", for: indexPath)
-        let category = categoryArray[indexPath.row]
-        cell.textLabel?.text = category.name
-        // MARK: You can edit items here with CoreData
         
-        // Set acccessoryType if item.done is true then add .checkmark else : then have .none
-        // This is Substitue for an if statements
+        let cell = super.tableView(tableView, cellForRowAt: indexPath)
+        
+        cell.textLabel?.text = categoryArray?[indexPath.row].name ?? "No Categories Found"
+        cell.backgroundColor = UIColor.systemRed
         return cell
     }
     @IBAction func addButtonPressed(_ sender: UIBarButtonItem) {
@@ -53,21 +60,10 @@ class CategoryTableViewController: UITableViewController {
         let action = UIAlertAction(title: "Add Category", style: .default) { action in
             // MARK: Creating with CoreData
             
-            let newItem = Category(context: self.context)
-            newItem.name = textField.text!
-            self.categoryArray.append(newItem)
-            // You can't append your own custom modules to the UserDefault, at this point
-            // Use a database, only use UserDefault for small pieces of data like volume
-            //            let encoder = PropertyListEncoder()
-            //            do{
-            //                let data = try encoder.encode(self.itemArray)
-            //                try data.write(to: self.dataFilePath!)
-            //            }catch{
-            //                print("Error encoding item array \(error)")
-            //            }
-            self.saveItems()
+            let newCategory = Category()
+            newCategory.name = textField.text!
             
-            
+            self.save(category: newCategory)
             self.tableView.reloadData()
         }
         alert.addTextField { alertTextField in
@@ -79,9 +75,11 @@ class CategoryTableViewController: UITableViewController {
         present(alert, animated: true, completion: nil)
     }
     //MARK: Data Manipulation Methods
-    func saveItems(){
+    func save(category: Category){
         do{
-            try context.save()
+            try realm.write{
+                realm.add(category)
+            }
         }catch{
             print("Error saving context \(error)")
         }
@@ -89,14 +87,23 @@ class CategoryTableViewController: UITableViewController {
         
         self.tableView.reloadData()
     }
-    func loadItems(with request: NSFetchRequest<Category> = Category.fetchRequest()){
-        // Must specify the data type of the out put
-        do{
-            categoryArray = try context.fetch(request)
-        }catch{
-            print("Error fetching data from context \(error)")
-        }
+    func loadItems(){
+        categoryArray = realm.objects(Category.self)
         tableView.reloadData()
+    }
+    // MARK: Delete Data From Swipe
+    
+    override func updateModel(at indexPath: IndexPath) {
+        if let category = self.categoryArray?[indexPath.row]{
+            do{
+                try self.realm.write{
+                    self.realm.delete(category)
+                }
+            }catch{
+                print("Error While Running: \(error)")
+            }
+        }
     }
     
 }
+
